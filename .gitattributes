@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.png binary
+# Snapshot bruto: bytes exatos, para o SHA-256 bater em qualquer SO
+data/** -text
