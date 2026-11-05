@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Instalar
+        run: pip install -e ".[dev,app]"
+
+      - name: Lint
+        run: ruff check .
+
+      # Inclui o eval: tests/test_juiz_e_eval.py re-julga as execucoes gravadas em
+      # evals/resultados/ com o juiz e os dados atuais e falha se a nota do modelo
+      # padrao cair abaixo de evals/limiares.json. Nao precisa de LLM nem de chave.
+      - name: Testes e eval gravado
+        run: pytest
+
+      - name: Relatorio do eval esta em dia
+        run: |
+          python -m pergunte.avaliacao.relatorio > /dev/null
+          git diff --exit-code evals/RESULTADOS.md

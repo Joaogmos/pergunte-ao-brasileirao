@@ -1,0 +1,17 @@
+# Sobe a API. O modelo de linguagem fica fora do container: por padrao a API fala
+# com o Ollama que esta rodando na sua maquina (host.docker.internal).
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      PERGUNTE_MODELO: ${PERGUNTE_MODELO:-ollama:qwen2.5:7b}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/saude')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
