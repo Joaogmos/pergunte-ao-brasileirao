@@ -142,7 +142,7 @@ Por isso a nota do `llama3.2:3b` nao melhora com ele.
 
 ### Testes
 
-59 testes (`pytest`, 2,5 s, sem LLM e sem rede). O grafo e testado com um modelo
+62 testes (`pytest`, 2,5 s, sem LLM e sem rede). O grafo e testado com um modelo
 roteirizado, que devolve as mensagens que o teste escreveu:
 
 | Teste | Prova que... |
@@ -176,7 +176,7 @@ ollama pull qwen2.5:7b
 python -m venv .venv && . .venv/Scripts/activate     # Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev,app]"
 
-pytest                                       # 59 testes, nao precisa do Ollama
+pytest                                       # 62 testes, nao precisa do Ollama
 streamlit run app/streamlit_app.py           # painel em http://localhost:8501
 uvicorn pergunte.api:app --reload            # API em http://localhost:8000/docs
 
@@ -235,9 +235,12 @@ FastAPI · Pydantic · Streamlit · pytest · ruff · Docker Compose · GitHub A
   com API paga e limite de gasto, so em PR que toque `agente.py` ou `ferramentas.py`.
 - 50 casos, todos escritos por mim. Falta pergunta de usuario real e falta volume
   para a diferenca entre 90% e 95% significar alguma coisa.
-- Sem observabilidade persistente. Tokens, latencia e chamadas voltam em cada
-  resposta e ficam no JSON do eval, mas nao ha tracing (Langfuse ou OpenTelemetry).
-- Memoria em processo. O checkpointer e em memoria e o historico nao e resumido.
+- Observabilidade minima. Com `PERGUNTE_TRACE=arquivo.jsonl`, cada pergunta vira uma
+  linha JSON com as ferramentas chamadas, o veredito do verificador, tokens e latencia.
+  Nao ha tracing por etapa do grafo (Langfuse ou OpenTelemetry).
+- Memoria em processo. O checkpointer e em memoria, entao reiniciar a API apaga as
+  conversas. O modelo recebe so as ultimas 6 perguntas de cada conversa (com as chamadas
+  de ferramenta delas); o que ficou para tras e cortado, sem resumo.
 - Custo em API nao medido. Faltou rodar o mesmo eval num modelo pago para ter a
   tabela de custo por pergunta ao lado da de qualidade, e testar cache de prompt nos
   1.300 tokens que se repetem.

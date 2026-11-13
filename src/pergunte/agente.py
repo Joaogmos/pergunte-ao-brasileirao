@@ -24,6 +24,7 @@ import json
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from typing import Annotated, Literal, TypedDict
 
 from langchain_core.language_models import BaseChatModel
@@ -116,6 +117,18 @@ def _texto(mensagem: AnyMessage) -> str:
     return "".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text").strip()
 
 
+def janela(mensagens: list[AnyMessage], max_turnos: int) -> list[AnyMessage]:
+    """As mensagens dos ultimos `max_turnos` turnos. Um turno comeca numa pergunta do usuario.
+
+    O corte e sempre no inicio de um turno: cortar no meio deixaria um resultado de ferramenta
+    sem o pedido que o originou, e os provedores rejeitam essa sequencia.
+    """
+    inicios = [i for i, m in enumerate(mensagens) if isinstance(m, HumanMessage) and m.name != VERIFICADOR]
+    if len(inicios) <= max_turnos:
+        return mensagens
+    return mensagens[inicios[-max_turnos]:]
+
+
 def construir_grafo(llm: BaseChatModel, servico: Servico, checkpointer=None, usar_verificador: bool = True):
     ferramentas = {f.name: f for f in criar_ferramentas(servico)}
     llm_com_ferramentas = llm.bind_tools(list(ferramentas.values()))
@@ -130,7 +143,7 @@ def construir_grafo(llm: BaseChatModel, servico: Servico, checkpointer=None, usa
     # ------------------------------------------------------------------ nos
 
     def no_modelo(estado: Estado) -> dict:
-        resposta = llm_com_ferramentas.invoke([sistema, *estado["messages"]])
+        resposta = llm_com_ferramentas.invoke([sistema, *janela(estado["messages"], config.MAX_TURNOS_NO_CONTEXTO)])
         uso = getattr(resposta, "usage_metadata", None) or {}
         return {
             "messages": [resposta],
@@ -244,7 +257,7 @@ class Agente:
         final = self.grafo.invoke(turno, {"configurable": {"thread_id": conversa_id or str(uuid.uuid4())},
                                           "recursion_limit": 30})
         rascunho = final.get("primeiro_rascunho") or {}
-        return Resposta(
+        resposta = Resposta(
             texto=_texto(final["messages"][-1]),
             tipo=final["tipo"],
             chamadas=final.get("chamadas", []),
@@ -259,3 +272,14 @@ class Agente:
             custo_usd=config.custo_usd(self.modelo, final["tokens_entrada"], final["tokens_saida"]),
             modelo=self.modelo,
         )
+        if config.ARQUIVO_DE_TRACE:
+            _registrar(config.ARQUIVO_DE_TRACE, pergunta, conversa_id, resposta)
+        return resposta
+
+
+def _registrar(arquivo: str, pergunta: str, conversa_id: str | None, resposta: Resposta) -> None:
+    """Uma linha JSON por pergunta: o minimo para auditar depois o que o agente respondeu e por que."""
+    linha = {"quando": datetime.now(UTC).isoformat(timespec="seconds"), "conversa_id": conversa_id,
+             "pergunta": pergunta, **resposta.como_dict()}
+    with open(arquivo, "a", encoding="utf-8") as f:
+        f.write(json.dumps(linha, ensure_ascii=False, default=str) + "\n")

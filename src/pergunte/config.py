@@ -25,6 +25,13 @@ OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 # Limites do agente
 MAX_CHAMADAS_LLM = 6  # por pergunta; evita loop de ferramenta
 MAX_CORRECOES = 1  # quantas vezes o verificador devolve o rascunho antes de recusar
+# Quantas perguntas (com suas chamadas de ferramenta) da conversa vao para o modelo a cada chamada.
+# Conversa longa nao pode crescer ate estourar a janela de contexto nem encarecer cada pergunta.
+MAX_TURNOS_NO_CONTEXTO = int(os.environ.get("PERGUNTE_MAX_TURNOS", "6"))
+
+# Se definido, cada pergunta respondida vira uma linha JSON neste arquivo (pergunta, ferramentas
+# chamadas, veredito do verificador, tokens, latencia). Desligado por padrao.
+ARQUIVO_DE_TRACE = os.environ.get("PERGUNTE_TRACE")
 
 # Preco em USD por milhao de tokens (entrada, saida). Modelo local nao tem preco:
 # o custo dele e a maquina, e por isso o relatorio mostra tokens e latencia.

@@ -100,3 +100,44 @@ def test_mesma_conversa_lembra_do_turno_anterior_e_conversas_diferentes_nao(cria
     assert perguntas(llm.vistos[2]) == ["Quem lidera?", "E o vice?"]
     assert perguntas(llm.vistos[4]) == ["Quem lidera?"]
     assert len(r2.chamadas) == 1  # contadores sao por turno, nao por conversa
+
+
+def test_conversa_longa_so_leva_os_ultimos_turnos_ao_modelo(criar_agente, monkeypatch):
+    monkeypatch.setattr(config, "MAX_TURNOS_NO_CONTEXTO", 2)
+    roteiro = [m for _ in range(4) for m in (pedir("classificacao_atual"), dizer("O lider e o Flamengo."))]
+    agente, llm = criar_agente(*roteiro)
+    for n in range(1, 5):
+        agente.perguntar(f"pergunta {n}", conversa_id="longa")
+
+    ultima = llm.vistos[-1]
+    assert [m.content for m in ultima if isinstance(m, HumanMessage)] == ["pergunta 3", "pergunta 4"]
+    # o corte nao separa o resultado da ferramenta do pedido que o originou
+    pedidos = {c["id"] for m in ultima for c in getattr(m, "tool_calls", [])}
+    assert all(m.tool_call_id in pedidos for m in ultima if isinstance(m, ToolMessage))
+    assert len(ultima) == 1 + 2 * 3 + 1  # sistema + (pergunta, pedido, resultado) x 2 + resposta do turno 3
+
+
+def test_janela_ignora_a_mensagem_de_correcao_do_verificador():
+    from langchain_core.messages import AIMessage
+
+    from pergunte.agente import janela
+    conversa = [HumanMessage("a"), AIMessage("x"), HumanMessage("corrija", name=VERIFICADOR), AIMessage("y"),
+                HumanMessage("b"), AIMessage("z")]
+    assert janela(conversa, 5) == conversa
+    assert [m.content for m in janela(conversa, 1)] == ["b", "z"]
+
+
+def test_trace_grava_uma_linha_json_por_pergunta_quando_ligado(criar_agente, monkeypatch, tmp_path):
+    import json
+
+    arquivo = tmp_path / "trace.jsonl"
+    monkeypatch.setattr(config, "ARQUIVO_DE_TRACE", str(arquivo))
+    agente, _ = criar_agente(pedir("classificacao_atual"), dizer("O lider e o Flamengo."), dizer("Sao 99 pontos."),
+                             dizer("Sao 99 pontos."))
+    agente.perguntar("Quem lidera?", conversa_id="t")
+    agente.perguntar("Quantos pontos?", conversa_id="t")
+
+    linhas = [json.loads(linha) for linha in arquivo.read_text(encoding="utf-8").splitlines()]
+    assert [(x["pergunta"], x["tipo"]) for x in linhas] == [("Quem lidera?", "resposta"), ("Quantos pontos?", "recusa")]
+    assert linhas[0]["chamadas"][0]["nome"] == "classificacao_atual" and linhas[1]["motivo_reprovacao"]
+    assert {"quando", "conversa_id", "tokens_entrada", "latencia_s"} <= linhas[0].keys()

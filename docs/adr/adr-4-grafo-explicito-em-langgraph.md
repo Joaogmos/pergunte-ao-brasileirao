@@ -28,9 +28,12 @@ O estado mistura dois ciclos de vida: `messages` e `fatos` duram a conversa;
 `chamadas`, contadores e veredito sao zerados a cada pergunta em `Agente.perguntar`.
 Isso esta num lugar so, mas e facil de esquecer ao adicionar um campo.
 
-O checkpointer e em memoria: reiniciar a API apaga as conversas, e o historico cresce
-sem resumo. Para producao seria um checkpointer em banco (Postgres) e um corte ou
-resumo do historico.
+O checkpointer e em memoria: reiniciar a API apaga as conversas. O que vai para o modelo
+e uma janela das ultimas 6 perguntas da conversa (`janela` em `agente.py`), cortada
+sempre no inicio de um turno para nao separar o resultado de uma ferramenta do pedido
+que o gerou. Os resultados de ferramenta antigos continuam valendo como fonte para o
+verificador. Para producao faltam um checkpointer em banco (Postgres) e um resumo do
+que a janela corta.
 
 ## Alternativas consideradas
 
